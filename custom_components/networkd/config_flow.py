@@ -31,8 +31,10 @@ class NetworkdConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 errors['base'] = 'interface_not_found'
             else:
                 link_introspection = await networkd_state.bus.introspect('org.freedesktop.network1', interface[1])
-                LOGGER.warn(link_introspection.interfaces)
-                if 'org.freedesktop.network1.DHCPServer' not in link_introspection.interfaces:
+                link_obj = networkd_state.bus.get_proxy_object('org.freedesktop.network1', interface[1], link_introspection)
+                try:
+                    link_obj.get_interface('org.freedesktop.network1.DHCPServer')
+                except:
                     errors['base'] = 'no_dhcp_server'
             finally:
                 await destroy_networkd_state(networkd_state)
