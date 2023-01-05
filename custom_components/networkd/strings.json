@@ -1,0 +1,16 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "data": {
+          "interface": "The label for the `api_key` input field"
+        }
+      }
+    },
+    "error": {
+      "no_dhcp_server": "Interface does not host a DHCP server",
+      "interface_not_found": "Interface does not exist",
+      "connection_failed": "Couldn't connect to dbus"
+    }
+  }
+}
