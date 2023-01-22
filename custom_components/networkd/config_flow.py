@@ -1,45 +1,63 @@
 import voluptuous as vol
 
-from homeassistant import config_entries
+from dbus_fast import BusType
+from dbus_fast.aio import MessageBus, ProxyInterface
 
-from .const import DOMAIN, CONF_INTERFACE, LOGGER
+from homeassistant import config_entries
+import homeassistant.helpers.config_validation as cv
+from homeassistant.core import callback
+
+from .const import DOMAIN, CONF_INTERFACES, LOGGER
 from .common import create_networkd_state, destroy_networkd_state
 
 
-DATA_SCHEMA = vol.Schema({vol.Required(CONF_INTERFACE): str})
+async def get_link_names():
+    networkd_state = await create_networkd_state()
+    links = await networkd_state.manager.call_list_links()
+    await destroy_networkd_state(networkd_state)
+    return [link[1] for link in links]
+
+
+class NetworkdOptionsFlow(config_entries.OptionsFlow):
+    def __init__(self, entry):
+        self.config_entry = entry
+
+    async def async_step_init(self, user_input = None):
+        if user_input is not None:
+            return self.async_create_entry(title = 'Networkd', data = user_input)
+
+        try:
+            link_names = await get_link_names()
+        except:
+            return self.async_abort(reason="connection_failed")
+
+        current_link_names = self.config_entry.data[CONF_INTERFACES]
+        data_schema = vol.Schema({
+            vol.Required(CONF_INTERFACES, default=current_link_names): cv.multi_select(link_names),
+        })
+
+        return self.async_show_form(step_id='init', data_schema = data_schema)
 
 
 class NetworkdConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_user(self, user_input = None):
-        if user_input is None:
-            return self.async_show_form(step_id='user', data_schema = DATA_SCHEMA)
+        if self._async_current_entries():
+            return self.async_abort(reason="single_instance_allowed")
 
-        interface_name = user_input.get(CONF_INTERFACE)
+        if user_input is not None:
+            return self.async_create_entry(title = 'Networkd', data = user_input)
 
-        await self.async_set_unique_id(interface_name)
-        self._abort_if_unique_id_configured()
-
-        errors = {}
         try:
-            networkd_state = await create_networkd_state()
+            link_names = await get_link_names()
         except:
-            errors['base'] = 'connection_failed'
-        else:
-            try:
-                interface = await networkd_state.manager.call_get_link_by_name(interface_name)
-            except:
-                errors['base'] = 'interface_not_found'
-            else:
-                link_introspection = await networkd_state.bus.introspect('org.freedesktop.network1', interface[1])
-                link_obj = networkd_state.bus.get_proxy_object('org.freedesktop.network1', interface[1], link_introspection)
-                try:
-                    link_obj.get_interface('org.freedesktop.network1.DHCPServer')
-                except:
-                    errors['base'] = 'no_dhcp_server'
-            finally:
-                await destroy_networkd_state(networkd_state)
+            return self.async_abort(reason="connection_failed")
+        data_schema = vol.Schema({
+            vol.Required(CONF_INTERFACES): cv.multi_select(link_names),
+        })
 
-        if errors != {}:
-            return self.async_show_form(step_id='user', data_schema = DATA_SCHEMA, errors=errors)
+        return self.async_show_form(step_id='user', data_schema = data_schema)
 
-        return self.async_create_entry(title = interface_name, data = user_input)
+    @staticmethod
+    @callback
+    def async_get_options_flow(entry):
+        return NetworkdOptionsFlow(entry)

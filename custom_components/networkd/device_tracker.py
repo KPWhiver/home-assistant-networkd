@@ -7,7 +7,7 @@ from .const import DOMAIN
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
-    coordinator = hass.data[DOMAIN].coordinators[entry.entry_id]
+    coordinator = hass.data[DOMAIN].coordinator
     tracked_dhcp_clients = hass.data[DOMAIN].tracked_dhcp_clients
 
     # Add entities currently connected
